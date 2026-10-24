@@ -1,37 +1,37 @@
 import { useColorScheme } from 'react-native';
 
-// "Salt and pepper": white #FFFFFF, light gray #D4D4D4, mid gray #B3B3B3, near-black #2B2B2B.
-// Status colors keep a little hue so low and out stock still stand out.
+// White and navy. Status colors keep their hue so low and out stock still stand out.
 const light = {
-  bg: '#f5f5f5',
+  bg: '#f4f6fa',
   surface: '#ffffff',
-  ink: '#2b2b2b',
-  muted: '#6b6b6b',
-  line: '#d4d4d4',
-  accent: '#2b2b2b',
-  accentSoft: '#d4d4d4',
-  ok: '#3f7a57',
-  okSoft: '#e3efe5',
+  ink: '#14213d',
+  muted: '#5b6478',
+  line: '#d9dee8',
+  accent: '#1b2a4a',
+  accentSoft: '#e3e8f2',
+  ok: '#2e7d4f',
+  okSoft: '#e2f0e4',
   warn: '#9a6200',
   warnSoft: '#f6ebcf',
   bad: '#b23a3a',
   badSoft: '#f5e0dc',
 };
 
+// Dark mode flips it: navy background, white text and buttons.
 const dark: typeof light = {
-  bg: '#1f1f1f',
-  surface: '#2b2b2b',
+  bg: '#0d1526',
+  surface: '#16213a',
   ink: '#ffffff',
-  muted: '#b3b3b3',
-  line: '#444444',
+  muted: '#a9b3c7',
+  line: '#263354',
   accent: '#ffffff',
-  accentSoft: '#4a4a4a',
+  accentSoft: '#2a3a5e',
   ok: '#7cc79a',
-  okSoft: '#24352b',
+  okSoft: '#1b3328',
   warn: '#e8b565',
-  warnSoft: '#3d3220',
+  warnSoft: '#3a3020',
   bad: '#f08a8a',
-  badSoft: '#432828',
+  badSoft: '#3f2230',
 };
 
 export type Colors = typeof light;
