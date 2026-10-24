@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { listProducts } from '../db/repo';
+import { listProducts, wasteSince } from '../db/repo';
 import { loadSampleBar } from '../db/sample';
-import { bottlesToReorder, stockStatus } from '../domain/inventory';
+import { bottlesToReorder, stockStatus, WASTE_REASONS, wasteByStaff } from '../domain/inventory';
 import { Button, Card, StatusPill, Title } from '../components/ui';
 import { fmtBottles, fmtMoney, useColors } from '../theme';
 import { useChanged, useQuery } from '../store';
@@ -60,7 +61,51 @@ export function StockScreen() {
           );
         })}
       </Card>
+      <WasteCard />
     </ScrollView>
+  );
+}
+
+const PERIODS = [
+  { label: 'This shift', hours: 12 },
+  { label: '7 days', hours: 24 * 7 },
+  { label: '30 days', hours: 24 * 30 },
+];
+
+function WasteCard() {
+  const c = useColors();
+  const [hours, setHours] = useState(PERIODS[0].hours);
+  const data = useQuery(d => wasteSince(d, hours), { entries: [], names: new Map<number, string>() }, [hours]);
+  const rows = wasteByStaff(data.entries);
+  const total = rows.reduce((a, r) => a + r.costCents, 0);
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <Title sub="Spills, comps and breakage at cost, by who logged them. Pick your name at the top of the app before scanning.">
+        Waste by bartender
+      </Title>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        {PERIODS.map(p => (
+          <Button key={p.hours} title={p.label} kind={hours === p.hours ? 'primary' : 'plain'} onPress={() => setHours(p.hours)} style={{ flex: 1, paddingHorizontal: 0, paddingVertical: 8 }} />
+        ))}
+      </View>
+      {!rows.length ? <Text style={{ color: c.muted }}>No waste logged in this period.</Text> : null}
+      {rows.map(r => (
+        <View key={r.staffId ?? 'none'} style={[styles.row, { borderColor: c.line }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: c.ink, fontWeight: '600' }}>{r.staffId === null ? 'No name picked' : data.names.get(r.staffId) ?? 'Removed'}</Text>
+            <Text style={{ color: c.muted, fontSize: 12 }}>
+              {WASTE_REASONS.filter(w => r.byReason[w.value]).map(w => `${w.label} ${fmtMoney(r.byReason[w.value]!)}`).join(' · ')}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ color: c.bad, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{fmtMoney(r.costCents)}</Text>
+            <Text style={{ color: c.muted, fontSize: 12 }}>{fmtBottles(r.bottles)} btl</Text>
+          </View>
+        </View>
+      ))}
+      {rows.length > 1 ? <Text style={{ color: c.muted, textAlign: 'right' }}>Total {fmtMoney(total)}</Text> : null}
+    </Card>
   );
 }
 

@@ -14,8 +14,8 @@ export function useChanged() {
   return useContext(Ctx).changed;
 }
 
-/** Runs `load` on mount and after every write anywhere in the app. */
-export function useQuery<T>(load: (db: SQLiteDatabase) => Promise<T>, initial: T): T {
+/** Runs `load` on mount, after every write anywhere in the app, and when `deps` change. */
+export function useQuery<T>(load: (db: SQLiteDatabase) => Promise<T>, initial: T, deps: unknown[] = []): T {
   const db = useSQLiteContext();
   const { version } = useContext(Ctx);
   const [data, setData] = useState<T>(initial);
@@ -25,6 +25,6 @@ export function useQuery<T>(load: (db: SQLiteDatabase) => Promise<T>, initial: T
     return () => { live = false; };
     // `load` is usually an inline arrow; re-running on version is what we want.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, version]);
+  }, [db, version, ...deps]);
   return data;
 }

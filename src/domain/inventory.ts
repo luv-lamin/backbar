@@ -5,6 +5,14 @@ export const ML_PER_OZ = 29.5735;
 
 export type MovementKind = 'in' | 'out' | 'waste' | 'sale' | 'count';
 
+export type WasteReason = 'spill' | 'comp' | 'breakage' | 'other';
+export const WASTE_REASONS: { value: WasteReason; label: string }[] = [
+  { value: 'spill', label: 'Spill' },
+  { value: 'comp', label: 'Comp' },
+  { value: 'breakage', label: 'Broken' },
+  { value: 'other', label: 'Other' },
+];
+
 export interface Product {
   id: number;
   upc: string;
@@ -186,4 +194,32 @@ export function stockTakeReport(inputs: StockTakeInput[], usesPos = true): Stock
     salesAccuracy: actualTotal > 0 ? recordedTotal / actualTotal : null,
     usesPos,
   };
+}
+
+export interface WasteEntry {
+  staffId: number | null;
+  reason: WasteReason | null;
+  bottles: number;
+  costCents: number;
+}
+
+export interface StaffWaste {
+  staffId: number | null;
+  bottles: number;
+  costCents: number;
+  byReason: Partial<Record<WasteReason, number>>;
+}
+
+/** Totals waste per person, costliest first. Entries without a person are grouped under null. */
+export function wasteByStaff(entries: WasteEntry[]): StaffWaste[] {
+  const groups = new Map<number | null, StaffWaste>();
+  for (const e of entries) {
+    const g = groups.get(e.staffId) ?? { staffId: e.staffId, bottles: 0, costCents: 0, byReason: {} };
+    g.bottles = round2(g.bottles + e.bottles);
+    g.costCents += e.costCents;
+    const reason = e.reason ?? 'other';
+    g.byReason[reason] = (g.byReason[reason] ?? 0) + e.costCents;
+    groups.set(e.staffId, g);
+  }
+  return [...groups.values()].sort((a, b) => b.costCents - a.costCents);
 }

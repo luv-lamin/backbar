@@ -10,6 +10,7 @@ import { ScanScreen } from './src/screens/ScanScreen';
 import { StockScreen } from './src/screens/StockScreen';
 import { InventoryScreen } from './src/screens/InventoryScreen';
 import { PosScreen } from './src/screens/PosScreen';
+import { StaffPicker } from './src/components/StaffPicker';
 
 const TABS = [
   { key: 'scan', label: 'Scan', Screen: ScanScreen },
@@ -40,6 +41,7 @@ function Shell() {
       <StatusBar style="auto" />
       <View style={[styles.header, { borderColor: c.line }]}>
         <Text style={[styles.brand, { color: c.ink }]}>Back<Text style={{ color: c.accent }}>bar</Text></Text>
+        <StaffPicker />
       </View>
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <Screen />
@@ -63,7 +65,10 @@ function Shell() {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  header: {
+    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
   brand: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
   tabs: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
   tab: { flex: 1, alignItems: 'center', paddingBottom: 10, gap: 8 },

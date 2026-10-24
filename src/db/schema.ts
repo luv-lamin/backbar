@@ -60,6 +60,16 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (session_id, product_id)
   );
   `,
+  `
+  CREATE TABLE staff (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    active INTEGER NOT NULL DEFAULT 1
+  );
+  -- Who scanned it, and for waste, why (spill, comp, breakage, other).
+  ALTER TABLE movements ADD COLUMN staff_id INTEGER REFERENCES staff(id);
+  ALTER TABLE movements ADD COLUMN reason TEXT;
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

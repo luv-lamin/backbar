@@ -12,6 +12,7 @@ import {
   stockStatus,
   stockTakeReport,
   variance,
+  wasteByStaff,
 } from './inventory.ts';
 
 test('Out lowers stock only for bars without a POS', () => {
@@ -134,4 +135,19 @@ test('without a POS, bottles sent out count as used', () => {
   assert.equal(report.rows[0].actualUsage, 5);
   assert.ok(Math.abs(report.salesAccuracy! - 0.9) < 1e-9);
   assert.equal(report.usesPos, false);
+});
+
+test('wasteByStaff totals per person and reason, costliest first', () => {
+  const rows = wasteByStaff([
+    { staffId: 1, reason: 'spill', bottles: 0.25, costCents: 500 },
+    { staffId: 2, reason: 'comp', bottles: 1, costCents: 2400 },
+    { staffId: 1, reason: 'comp', bottles: 0.5, costCents: 1000 },
+    { staffId: 1, reason: 'spill', bottles: 0.25, costCents: 500 },
+    { staffId: null, reason: null, bottles: 0.1, costCents: 200 },
+  ]);
+  assert.deepEqual(rows.map(r => r.staffId), [2, 1, null]);
+  assert.equal(rows[1].bottles, 1);
+  assert.equal(rows[1].costCents, 2000);
+  assert.deepEqual(rows[1].byReason, { spill: 1000, comp: 1000 });
+  assert.deepEqual(rows[2].byReason, { other: 200 });
 });

@@ -9,6 +9,8 @@ import {
   type SaleLine,
   stockTakeReport,
   type StockTakeReport,
+  type WasteEntry,
+  type WasteReason,
 } from '../domain/inventory';
 
 interface ProductRow {
@@ -61,10 +63,11 @@ export async function recordMovement(
   delta: number,
   source = 'scan',
   note: string | null = null,
+  reason: WasteReason | null = null,
 ): Promise<number> {
   let onHand = 0;
   await db.withTransactionAsync(async () => {
-    onHand = await applyDelta(db, productId, kind, delta, source, note);
+    onHand = await applyDelta(db, productId, kind, delta, source, note, reason);
   });
   return onHand;
 }
@@ -76,24 +79,21 @@ async function applyDelta(
   delta: number,
   source: string,
   note: string | null,
+  reason: WasteReason | null = null,
 ): Promise<number> {
   const row = await db.getFirstAsync<{ on_hand: number }>('SELECT on_hand FROM products WHERE id = ?', productId);
   if (!row) throw new Error('Product not found');
   const applied = clampDelta(row.on_hand, delta);
-  if (!affectsStock(kind, await getUsesPos(db))) {
-    // Logged for the record (who moved what to the bar); POS sales take it out of stock when it's poured.
-    await db.runAsync(
-      'INSERT INTO movements (product_id, kind, bottles, source, note) VALUES (?, ?, ?, ?, ?)',
-      productId, kind, applied, source, note,
-    );
-    return row.on_hand;
-  }
+  // POS sales aren't done by whoever holds this phone.
+  const staffId = source === 'scan' || source === 'inventory' ? await getCurrentStaffId(db) : null;
+  await db.runAsync(
+    'INSERT INTO movements (product_id, kind, bottles, source, note, staff_id, reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    productId, kind, applied, source, note, staffId, reason,
+  );
+  // With a POS, Out is only logged (who moved what to the bar); sales take it out of stock when it's poured.
+  if (!affectsStock(kind, await getUsesPos(db))) return row.on_hand;
   const onHand = row.on_hand + applied;
   await db.runAsync('UPDATE products SET on_hand = ? WHERE id = ?', onHand, productId);
-  await db.runAsync(
-    'INSERT INTO movements (product_id, kind, bottles, source, note) VALUES (?, ?, ?, ?, ?)',
-    productId, kind, applied, source, note,
-  );
   return onHand;
 }
 
@@ -342,4 +342,58 @@ export async function getUsesPos(db: SQLiteDatabase): Promise<boolean> {
 
 export async function setUsesPos(db: SQLiteDatabase, usesPos: boolean): Promise<void> {
   await setSetting(db, 'bar.usesPos', usesPos ? '1' : '0');
+}
+
+// ---- Staff ----
+
+export interface Staff {
+  id: number;
+  name: string;
+}
+
+export async function listStaff(db: SQLiteDatabase): Promise<Staff[]> {
+  return db.getAllAsync<Staff>('SELECT id, name FROM staff WHERE active = 1 ORDER BY name');
+}
+
+export async function addStaff(db: SQLiteDatabase, name: string): Promise<Staff> {
+  const trimmed = name.trim();
+  await db.runAsync(
+    'INSERT INTO staff (name) VALUES (?) ON CONFLICT (name) DO UPDATE SET active = 1', trimmed,
+  );
+  return (await db.getFirstAsync<Staff>('SELECT id, name FROM staff WHERE name = ?', trimmed))!;
+}
+
+export async function removeStaff(db: SQLiteDatabase, id: number): Promise<void> {
+  // Kept in the table so past waste still shows their name.
+  await db.runAsync('UPDATE staff SET active = 0 WHERE id = ?', id);
+  if ((await getCurrentStaffId(db)) === id) await db.runAsync("DELETE FROM settings WHERE key = 'staff.current'");
+}
+
+export async function getCurrentStaffId(db: SQLiteDatabase): Promise<number | null> {
+  const v = await getSetting(db, 'staff.current');
+  return v ? Number(v) : null;
+}
+
+export async function getCurrentStaff(db: SQLiteDatabase): Promise<Staff | null> {
+  const id = await getCurrentStaffId(db);
+  return id === null ? null : await db.getFirstAsync<Staff>('SELECT id, name FROM staff WHERE id = ? AND active = 1', id);
+}
+
+export async function setCurrentStaff(db: SQLiteDatabase, id: number): Promise<void> {
+  await setSetting(db, 'staff.current', String(id));
+}
+
+/** Waste, comps and breakage logged in the last `hours`, with each entry's cost. */
+export async function wasteSince(db: SQLiteDatabase, hours: number): Promise<{ entries: WasteEntry[]; names: Map<number, string> }> {
+  const rows = await db.getAllAsync<{ staff_id: number | null; reason: WasteReason | null; bottles: number; cost_cents: number }>(
+    `SELECT m.staff_id, m.reason, -m.bottles AS bottles, p.cost_cents
+     FROM movements m JOIN products p ON p.id = m.product_id
+     WHERE m.kind = 'waste' AND m.created_at >= datetime('now', ?)`,
+    `-${hours} hours`,
+  );
+  const names = await db.getAllAsync<Staff>('SELECT id, name FROM staff');
+  return {
+    entries: rows.map(r => ({ staffId: r.staff_id, reason: r.reason, bottles: r.bottles, costCents: Math.round(r.bottles * r.cost_cents) })),
+    names: new Map(names.map(n => [n.id, n.name])),
+  };
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { addProduct, findByUpc, recentActivity, recordMovement } from '../db/repo';
-import { movementDelta, normalizeBarcode, type Product } from '../domain/inventory';
+import { movementDelta, normalizeBarcode, WASTE_REASONS, type Product, type WasteReason } from '../domain/inventory';
 import { Button, Card, Field, Label, Segmented, Title } from '../components/ui';
 import { BarcodeCamera } from '../components/BarcodeCamera';
 import { fmtBottles, useColors } from '../theme';
@@ -25,6 +25,7 @@ export function ScanScreen() {
   const [autoLog, setAutoLog] = useState(false);
   const [qty, setQty] = useState('1');
   const [amount, setAmount] = useState(1);
+  const [reason, setReason] = useState<WasteReason>('spill');
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const activity = useQuery(d => recentActivity(d, 15), []);
 
@@ -56,7 +57,7 @@ export function ScanScreen() {
     if (mode !== 'in' && bottles > p.onHand) {
       return setMessage({ text: `Only ${fmtBottles(p.onHand)} bottles of ${p.name} on hand.`, ok: false });
     }
-    const onHand = await recordMovement(db, p.id, mode, movementDelta(mode, bottles));
+    const onHand = await recordMovement(db, p.id, mode, movementDelta(mode, bottles), 'scan', null, mode === 'waste' ? reason : null);
     const verb = { in: 'Received', out: 'Sent to bar:', waste: 'Logged waste:' }[mode];
     setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${p.name}. ${fmtBottles(onHand)} on hand in total.`, ok: true });
     reset();
@@ -129,6 +130,16 @@ export function ScanScreen() {
             <Text style={{ color: c.ink, fontSize: 17, fontWeight: '700' }}>{product.name}</Text>
             <Text style={{ color: c.muted }}>{product.upc} · {product.sizeMl} ml · {fmtBottles(product.onHand)} on hand</Text>
           </View>
+          {mode === 'waste' ? (
+            <View style={{ gap: 6 }}>
+              <Label>What happened</Label>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {WASTE_REASONS.map(r => (
+                  <Button key={r.value} title={r.label} kind={reason === r.value ? 'primary' : 'plain'} onPress={() => setReason(r.value)} style={{ flex: 1, paddingHorizontal: 0 }} />
+                ))}
+              </View>
+            </View>
+          ) : null}
           {mode === 'waste' ? (
             <View style={{ gap: 6 }}>
               <Label>Amount lost per bottle</Label>
