@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useSQLiteContext } from 'expo-sqlite';
 import { addProduct, findByUpc, recentActivity, recordMovement } from '../db/repo';
@@ -10,6 +10,8 @@ import { useChanged, useQuery } from '../store';
 
 type Mode = 'in' | 'out' | 'waste';
 const WASTE_AMOUNTS: [number, string][] = [[1, 'Full'], [0.75, '¾'], [0.5, '½'], [0.25, '¼'], [0.06, 'Shot']];
+// Common case and half-case sizes, so a delivery is one tap and one scan.
+const BATCH_PRESETS = [1, 6, 12, 24];
 
 export function ScanScreen() {
   const c = useColors();
@@ -20,10 +22,13 @@ export function ScanScreen() {
   const [code, setCode] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
   const [unknownCode, setUnknownCode] = useState<string | null>(null);
+  const [batch, setBatch] = useState('1');
+  const [autoLog, setAutoLog] = useState(false);
   const [qty, setQty] = useState('1');
   const [amount, setAmount] = useState(1);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const busy = useRef(false);
+  const lastScan = useRef({ code: '', at: 0 });
   const activity = useQuery(d => recentActivity(d, 15), []);
 
   async function lookup(raw: string) {
@@ -31,9 +36,11 @@ export function ScanScreen() {
     if (!upc) return;
     setCode(upc);
     setMessage(null);
-    setQty('1');
+    setQty(batch);
     setAmount(1);
     const p = await findByUpc(db, upc);
+    // Waste needs the amount-lost choice, so it always stops for confirmation.
+    if (p && autoLog && mode !== 'waste') return commit(p, batch);
     setProduct(p);
     setUnknownCode(p ? null : upc);
   }
@@ -41,6 +48,10 @@ export function ScanScreen() {
   function onScanned(r: BarcodeScanningResult) {
     // The camera fires many times per second; take one read until the scan is handled.
     if (busy.current || product || unknownCode) return;
+    // With auto-log on, the same bottle stays in view after it's logged; don't count it twice.
+    const now = Date.now();
+    if (r.data === lastScan.current.code && now - lastScan.current.at < 2500) return;
+    lastScan.current = { code: r.data, at: now };
     busy.current = true;
     lookup(r.data).finally(() => { busy.current = false; });
   }
@@ -51,17 +62,17 @@ export function ScanScreen() {
     setCode('');
   }
 
-  async function commit() {
-    if (!product) return;
-    const n = parseInt(qty, 10);
+  async function commit(p: Product | null = product, count = qty) {
+    if (!p) return;
+    const n = parseInt(count, 10);
     if (!n || n < 1) return setMessage({ text: 'Enter at least 1 bottle.', ok: false });
     const bottles = mode === 'waste' ? n * amount : n;
-    if (mode !== 'in' && bottles > product.onHand) {
-      return setMessage({ text: `Only ${fmtBottles(product.onHand)} bottles of ${product.name} on hand.`, ok: false });
+    if (mode !== 'in' && bottles > p.onHand) {
+      return setMessage({ text: `Only ${fmtBottles(p.onHand)} bottles of ${p.name} on hand.`, ok: false });
     }
-    const onHand = await recordMovement(db, product.id, mode, movementDelta(mode, bottles));
+    const onHand = await recordMovement(db, p.id, mode, movementDelta(mode, bottles));
     const verb = { in: 'Received', out: 'Sent to bar', waste: 'Logged waste:' }[mode];
-    setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${product.name}. Now ${fmtBottles(onHand)} on hand.`, ok: true });
+    setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${p.name}. Now ${fmtBottles(onHand)} on hand.`, ok: true });
     reset();
     changed();
   }
@@ -77,6 +88,33 @@ export function ScanScreen() {
           { value: 'waste', label: 'Waste', hint: 'Spill, comp', tint: [c.badSoft, c.bad] },
         ]}
       />
+
+      <Card>
+        <Label>Bottles per scan</Label>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Button title="−" onPress={() => setBatch(b => String(Math.max(1, (parseInt(b, 10) || 1) - 1)))} style={styles.step} />
+          <Field
+            style={{ width: 64, textAlign: 'center', fontSize: 18, fontWeight: '700' }}
+            value={batch}
+            onChangeText={t => setBatch(t.replace(/\D/g, ''))}
+            onEndEditing={() => setBatch(b => String(Math.max(1, parseInt(b, 10) || 1)))}
+            keyboardType="number-pad"
+            accessibilityLabel="Bottles per scan"
+          />
+          <Button title="+" onPress={() => setBatch(b => String((parseInt(b, 10) || 0) + 1))} style={styles.step} />
+          <View style={{ flex: 1 }} />
+          {BATCH_PRESETS.slice(1).map(n => (
+            <Button key={n} title={String(n)} kind={batch === String(n) ? 'primary' : 'plain'} onPress={() => setBatch(String(n))} style={styles.step} />
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <Text style={{ color: c.ink, flex: 1 }}>
+            Log right away on scan{'\n'}
+            <Text style={{ color: c.muted, fontSize: 12 }}>Skips the confirm step for In and Out. Waste always asks.</Text>
+          </Text>
+          <Switch value={autoLog} onValueChange={setAutoLog} accessibilityLabel="Log right away on scan" />
+        </View>
+      </Card>
 
       <View style={[styles.camera, { backgroundColor: c.ink }]}>
         {permission?.granted ? (
@@ -139,7 +177,7 @@ export function ScanScreen() {
               <Label>Bottles</Label>
               <Field value={qty} onChangeText={setQty} keyboardType="number-pad" />
             </View>
-            <Button style={{ flex: 1 }} kind="primary" title={{ in: 'Receive', out: 'Send to bar', waste: 'Log waste' }[mode]} onPress={commit} />
+            <Button style={{ flex: 1 }} kind="primary" title={{ in: 'Receive', out: 'Send to bar', waste: 'Log waste' }[mode]} onPress={() => commit()} />
           </View>
           <Button title="Cancel" onPress={reset} />
         </Card>
@@ -208,6 +246,7 @@ const styles = StyleSheet.create({
   page: { padding: 16, gap: 14 },
   camera: { height: 220, borderRadius: 12, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   cameraOff: { padding: 20, gap: 12, alignItems: 'center' },
+  step: { minWidth: 44, paddingHorizontal: 10 },
   reticle: { position: 'absolute', width: '70%', height: 90, borderWidth: 2, borderRadius: 8 },
   toast: { padding: 12, borderRadius: 10, fontWeight: '500', overflow: 'hidden' },
   logRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },

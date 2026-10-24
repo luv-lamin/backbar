@@ -19,7 +19,7 @@ The camera needs a development build or a store build (`npx expo run:ios`, `npx 
 
 | Tab   | What it does |
 | ----- | ------------ |
-| Scan  | Camera barcode scanning (UPC/EAN), or type a code / use a Bluetooth scanner. Choose In, Out or Waste. Unknown barcodes open an "add product" form. |
+| Scan  | Camera barcode scanning (UPC/EAN), or type a code / use a Bluetooth scanner. Choose In, Out or Waste, and set bottles per scan (1, 6, 12, 24 or any number) so a case is one scan. "Log right away" skips the confirm step. Unknown barcodes open an "add product" form. |
 | Stock | Bottles on hand against par, low and out flags, stock value, bottles to reorder. |
 | Count | End-of-shift shelf count; variance per product in bottles and dollars. Saving resets stock to the count. |
 | POS   | Square connection, pull sales, map unmatched drinks to recipes. Toast, Clover and Lightspeed are listed as coming soon. |
