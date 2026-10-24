@@ -21,6 +21,8 @@ import { fmtBottles, fmtMoney, useColors } from '../theme';
 import { useChanged, useQuery } from '../store';
 
 const LEVELS: [number, string][] = [[1, 'Full'], [0.75, '¾'], [0.5, '½'], [0.25, '¼']];
+// Tenths, the way bar inventory is usually counted by eye against the bottle's shape.
+const TENTHS = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
 const MULTIPLIERS = [1, 6, 12];
 
 export function InventoryScreen() {
@@ -82,7 +84,8 @@ function CountingView({ session, products }: { session: InventorySession; produc
       setMessage({ text: `Barcode ${upc} isn't in your catalog. Add it on the Scan tab, then scan it here.`, ok: false });
       return;
     }
-    const bottles = level * multiplier;
+    // A case multiplier only makes sense for sealed bottles.
+    const bottles = level === 1 ? multiplier : level;
     const total = await addToCount(db, session.id, p.id, bottles);
     setLastAdd({ productId: p.id, bottles });
     setMessage({ text: `+${fmtBottles(bottles)} ${p.name}. Counted ${fmtBottles(total)}.`, ok: true });
@@ -155,7 +158,15 @@ function CountingView({ session, products }: { session: InventorySession; produc
             <Button key={m} title={`×${m}`} kind={multiplier === m ? 'primary' : 'plain'} onPress={() => setMultiplier(m)} style={styles.chip} />
           ))}
         </View>
-        <Text style={{ color: c.muted, fontSize: 12 }}>Use ¾, ½ or ¼ for open bottles; it goes back to Full after one scan. Use ×6 or ×12 for sealed cases.</Text>
+        <Label>Open bottle, by tenths</Label>
+        <View style={styles.chips}>
+          {TENTHS.map(t => (
+            <Button key={t} title={`.${Math.round(t * 10)}`} kind={level === t ? 'primary' : 'plain'} onPress={() => setLevel(t)} style={styles.tenth} />
+          ))}
+        </View>
+        <Text style={{ color: c.muted, fontSize: 12 }}>
+          For an open bottle, pick how full it is, then scan it. It goes back to Full after one scan. Use ×6 or ×12 for sealed cases.
+        </Text>
       </Card>
 
       <BarcodeCamera onScan={scan} />
@@ -299,6 +310,7 @@ const styles = StyleSheet.create({
   progress: { height: 6, borderRadius: 99, overflow: 'hidden' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { minWidth: 48, paddingHorizontal: 10, paddingVertical: 8 },
+  tenth: { minWidth: 34, paddingHorizontal: 6, paddingVertical: 8 },
   step: { minWidth: 40, paddingHorizontal: 8, paddingVertical: 6 },
   toast: { padding: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
