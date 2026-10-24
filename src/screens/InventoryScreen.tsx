@@ -298,7 +298,7 @@ function ReportRows({ report, products }: { report: StockTakeReport; products: P
 function Stat({ value, label, tone }: { value: string; label: string; tone: string }) {
   const c = useColors();
   return (
-    <View style={[styles.stat, { borderColor: c.line, backgroundColor: c.bg }]}>
+    <View style={[styles.stat, { borderColor: c.glassBorder, backgroundColor: c.glass }]}>
       <Text style={{ color: tone, fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{value}</Text>
       <Text style={{ color: c.muted, fontSize: 12 }}>{label}</Text>
     </View>

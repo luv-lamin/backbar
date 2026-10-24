@@ -35,7 +35,7 @@ export function StaffPicker() {
         accessibilityRole="button"
         accessibilityLabel={current ? `Working: ${current.name}. Change` : "Choose who's working"}
         onPress={() => setOpen(true)}
-        style={[styles.chip, { borderColor: current ? c.line : c.warn, backgroundColor: current ? c.bg : c.warnSoft }]}
+        style={[styles.chip, { borderColor: current ? c.glassBorder : c.warn, backgroundColor: current ? c.glass : c.warnSoft }]}
       >
         <Text style={{ color: current ? c.ink : c.warn, fontWeight: '600' }} numberOfLines={1}>
           {current ? current.name : "Who's working?"}

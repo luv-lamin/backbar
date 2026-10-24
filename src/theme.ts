@@ -15,6 +15,11 @@ const light = {
   warnSoft: '#f6ebcf',
   bad: '#b23a3a',
   badSoft: '#f5e0dc',
+  // Liquid glass: panels are see-through over a soft gradient.
+  glass: 'rgba(255,255,255,0.55)',
+  glassBorder: 'rgba(255,255,255,0.85)',
+  gradientTop: '#e9eff9',
+  gradientBottom: '#b8c7e4',
 };
 
 // Dark mode flips it: navy background, white text and buttons.
@@ -32,6 +37,10 @@ const dark: typeof light = {
   warnSoft: '#3a3020',
   bad: '#f08a8a',
   badSoft: '#3f2230',
+  glass: 'rgba(255,255,255,0.08)',
+  glassBorder: 'rgba(255,255,255,0.18)',
+  gradientTop: '#0d1526',
+  gradientBottom: '#22396e',
 };
 
 export type Colors = typeof light;

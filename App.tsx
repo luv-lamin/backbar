@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SQLiteProvider } from 'expo-sqlite';
+import { LinearGradient } from 'expo-linear-gradient';
 import { migrate } from './src/db/schema';
 import { DataProvider } from './src/store';
 import { useColors } from './src/theme';
@@ -11,6 +12,7 @@ import { StockScreen } from './src/screens/StockScreen';
 import { InventoryScreen } from './src/screens/InventoryScreen';
 import { PosScreen } from './src/screens/PosScreen';
 import { StaffPicker } from './src/components/StaffPicker';
+import { Glass } from './src/components/Glass';
 
 const TABS = [
   { key: 'scan', label: 'Scan', Screen: ScanScreen },
@@ -37,16 +39,19 @@ function Shell() {
   const { Screen } = TABS.find(t => t.key === tab)!;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }} edges={['top', 'bottom']}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+    {/* Glass needs something behind it to refract, so the app sits on a soft gradient. */}
+    <LinearGradient colors={[c.gradientTop, c.gradientBottom]} style={StyleSheet.absoluteFill} />
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
       <StatusBar style="auto" />
-      <View style={[styles.header, { borderColor: c.line }]}>
+      <Glass style={styles.header} radius={24}>
         <Text style={[styles.brand, { color: c.ink }]}>Back<Text style={{ color: c.accent }}>bar</Text></Text>
         <StaffPicker />
-      </View>
-      <View style={{ flex: 1, backgroundColor: c.bg }}>
+      </Glass>
+      <View style={{ flex: 1 }}>
         <Screen />
       </View>
-      <View style={[styles.tabs, { borderColor: c.line }]}>
+      <Glass style={styles.tabs} radius={28} interactive>
         {TABS.map(t => (
           <Pressable
             key={t.key}
@@ -55,22 +60,25 @@ function Shell() {
             onPress={() => setTab(t.key)}
             style={styles.tab}
           >
-            <View style={[styles.tabMark, { backgroundColor: tab === t.key ? c.accent : 'transparent' }]} />
-            <Text style={{ color: tab === t.key ? c.ink : c.muted, fontWeight: '600' }}>{t.label}</Text>
+            <View style={[styles.tabPill, tab === t.key && { backgroundColor: c.accentSoft }]}>
+              <Text style={{ color: tab === t.key ? c.ink : c.muted, fontWeight: tab === t.key ? '700' : '600' }}>{t.label}</Text>
+            </View>
           </Pressable>
         ))}
-      </View>
+      </Glass>
     </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Header and tab bar float as glass capsules over the content, as in iOS 26.
   header: {
-    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: 12, marginTop: 4, paddingHorizontal: 16, paddingVertical: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
   },
   brand: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
-  tabs: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  tab: { flex: 1, alignItems: 'center', paddingBottom: 10, gap: 8 },
-  tabMark: { height: 3, width: '60%', borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+  tabs: { flexDirection: 'row', marginHorizontal: 12, marginBottom: 4, padding: 6 },
+  tab: { flex: 1 },
+  tabPill: { alignItems: 'center', paddingVertical: 10, borderRadius: 22 },
 });

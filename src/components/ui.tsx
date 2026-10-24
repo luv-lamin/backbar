@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 import { useColors } from '../theme';
+import { Glass } from './Glass';
 import type { StockStatus } from '../domain/inventory';
 
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const c = useColors();
-  return <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }, style]}>{children}</View>;
+  return <Glass style={[styles.card, style]}>{children}</Glass>;
 }
 
 export function Title({ children, sub }: { children: ReactNode; sub?: string }) {
@@ -27,7 +28,7 @@ export function Button({
   title, onPress, kind = 'plain', disabled, style,
 }: { title: string; onPress: () => void; kind?: 'plain' | 'primary' | 'danger'; disabled?: boolean; style?: ViewStyle }) {
   const c = useColors();
-  const bg = kind === 'primary' ? c.accent : kind === 'danger' ? c.badSoft : c.surface;
+  const bg = kind === 'primary' ? c.accent : kind === 'danger' ? c.badSoft : c.glass;
   const fg = kind === 'primary' ? c.surface : kind === 'danger' ? c.bad : c.ink;
   return (
     <Pressable
@@ -36,7 +37,7 @@ export function Button({
       disabled={disabled}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: bg, borderColor: kind === 'primary' ? c.accent : c.line, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 },
+        { backgroundColor: bg, borderColor: kind === 'primary' ? c.accent : c.glassBorder, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 },
         style,
       ]}
     >
@@ -51,7 +52,7 @@ export function Field(props: TextInputProps) {
     <TextInput
       placeholderTextColor={c.muted}
       {...props}
-      style={[styles.input, { backgroundColor: c.bg, borderColor: c.line, color: c.ink }, props.style]}
+      style={[styles.input, { backgroundColor: c.glass, borderColor: c.glassBorder, color: c.ink }, props.style]}
     />
   );
 }
@@ -73,7 +74,7 @@ export function Segmented<T extends string>({
 }: { options: { value: T; label: string; hint?: string; tint: [string, string] }[]; value: T; onChange: (v: T) => void }) {
   const c = useColors();
   return (
-    <View style={[styles.seg, { borderColor: c.line }]}>
+    <View style={[styles.seg, { borderColor: c.glassBorder }]}>
       {options.map((o, i) => {
         const on = o.value === value;
         return (
@@ -82,7 +83,7 @@ export function Segmented<T extends string>({
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             onPress={() => onChange(o.value)}
-            style={[styles.segItem, { backgroundColor: on ? o.tint[0] : c.surface, borderLeftWidth: i ? 1 : 0, borderColor: c.line }]}
+            style={[styles.segItem, { backgroundColor: on ? o.tint[0] : c.glass, borderLeftWidth: i ? 1 : 0, borderColor: c.glassBorder }]}
           >
             <Text style={{ color: on ? o.tint[1] : c.muted, fontWeight: '700', fontSize: 15 }}>{o.label}</Text>
             {o.hint ? <Text style={{ color: on ? o.tint[1] : c.muted, fontSize: 11 }}>{o.hint}</Text> : null}
@@ -94,12 +95,13 @@ export function Segmented<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 12 },
+  card: { padding: 16, gap: 12 },
   title: { fontSize: 20, fontWeight: '700' },
   label: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
-  button: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
-  input: { borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, fontSize: 16 },
+  // Capsule buttons, as in Apple's Liquid Glass.
+  button: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 99, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
+  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, fontSize: 16 },
   pill: { borderRadius: 99, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start' },
-  seg: { flexDirection: 'row', borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
+  seg: { flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, overflow: 'hidden' },
   segItem: { flex: 1, alignItems: 'center', paddingVertical: 10 },
 });

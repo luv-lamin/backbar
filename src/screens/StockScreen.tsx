@@ -112,7 +112,7 @@ function WasteCard() {
 function Stat({ value, label, tone }: { value: string; label: string; tone?: string }) {
   const c = useColors();
   return (
-    <View style={[styles.stat, { backgroundColor: c.surface, borderColor: c.line }]}>
+    <View style={[styles.stat, { backgroundColor: c.glass, borderColor: c.glassBorder }]}>
       <Text style={{ color: tone ?? c.ink, fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{value}</Text>
       <Text style={{ color: c.muted, fontSize: 12 }}>{label}</Text>
     </View>
