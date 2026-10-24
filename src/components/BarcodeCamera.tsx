@@ -42,7 +42,7 @@ export function BarcodeCamera({ onScan, paused = false }: { onScan: (code: strin
           {permission?.canAskAgain !== false ? <Button title="Allow camera" kind="primary" onPress={requestPermission} /> : null}
         </View>
       )}
-      <View pointerEvents="none" style={[styles.reticle, { borderColor: c.brass }]} />
+      <View pointerEvents="none" style={[styles.reticle, { borderColor: c.accent }]} />
     </View>
   );
 }

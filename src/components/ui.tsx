@@ -27,7 +27,7 @@ export function Button({
   title, onPress, kind = 'plain', disabled, style,
 }: { title: string; onPress: () => void; kind?: 'plain' | 'primary' | 'danger'; disabled?: boolean; style?: ViewStyle }) {
   const c = useColors();
-  const bg = kind === 'primary' ? c.brass : kind === 'danger' ? c.badSoft : c.surface;
+  const bg = kind === 'primary' ? c.accent : kind === 'danger' ? c.badSoft : c.surface;
   const fg = kind === 'primary' ? c.surface : kind === 'danger' ? c.bad : c.ink;
   return (
     <Pressable
@@ -36,7 +36,7 @@ export function Button({
       disabled={disabled}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: bg, borderColor: kind === 'primary' ? c.brass : c.line, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 },
+        { backgroundColor: bg, borderColor: kind === 'primary' ? c.accent : c.line, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 },
         style,
       ]}
     >

@@ -143,7 +143,7 @@ function CountingView({ session, products }: { session: InventorySession; produc
           Inventory in progress
         </Title>
         <View style={[styles.progress, { backgroundColor: c.line }]}>
-          <View style={{ width: `${products.length ? (counts.size / products.length) * 100 : 0}%`, height: '100%', backgroundColor: c.brass }} />
+          <View style={{ width: `${products.length ? (counts.size / products.length) * 100 : 0}%`, height: '100%', backgroundColor: c.accent }} />
         </View>
         <Label>Each scan counts</Label>
         <View style={styles.chips}>

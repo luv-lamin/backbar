@@ -70,7 +70,7 @@ export function ScanScreen() {
         onChange={setMode}
         options={[
           { value: 'in', label: 'In', hint: 'Delivery', tint: [c.okSoft, c.ok] },
-          { value: 'out', label: 'Out', hint: 'To the bar', tint: [c.brassSoft, c.brass] },
+          { value: 'out', label: 'Out', hint: 'To the bar', tint: [c.accentSoft, c.accent] },
           { value: 'waste', label: 'Waste', hint: 'Spill, comp', tint: [c.badSoft, c.bad] },
         ]}
       />

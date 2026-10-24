@@ -39,7 +39,7 @@ function Shell() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.surface }} edges={['top', 'bottom']}>
       <StatusBar style="auto" />
       <View style={[styles.header, { borderColor: c.line }]}>
-        <Text style={[styles.brand, { color: c.ink }]}>Back<Text style={{ color: c.brass }}>bar</Text></Text>
+        <Text style={[styles.brand, { color: c.ink }]}>Back<Text style={{ color: c.accent }}>bar</Text></Text>
       </View>
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <Screen />
@@ -53,7 +53,7 @@ function Shell() {
             onPress={() => setTab(t.key)}
             style={styles.tab}
           >
-            <View style={[styles.tabMark, { backgroundColor: tab === t.key ? c.brass : 'transparent' }]} />
+            <View style={[styles.tabMark, { backgroundColor: tab === t.key ? c.accent : 'transparent' }]} />
             <Text style={{ color: tab === t.key ? c.ink : c.muted, fontWeight: '600' }}>{t.label}</Text>
           </Pressable>
         ))}
