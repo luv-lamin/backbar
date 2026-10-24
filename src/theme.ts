@@ -1,15 +1,15 @@
 import { useColorScheme } from 'react-native';
 
-// "Ink wash": charcoal #4A4A4A, cool gray #CBCBCB, soft ivory #FFFFE3, slate blue #6D8196.
-// The slate is a shade darker on buttons so white text stays readable.
+// "Salt and pepper": white #FFFFFF, light gray #D4D4D4, mid gray #B3B3B3, near-black #2B2B2B.
+// Status colors keep a little hue so low and out stock still stand out.
 const light = {
-  bg: '#ffffe3',
-  surface: '#fffff6',
-  ink: '#4a4a4a',
-  muted: '#6e6e6e',
-  line: '#cbcbcb',
-  accent: '#5e7287',
-  accentSoft: '#e4e9ee',
+  bg: '#f5f5f5',
+  surface: '#ffffff',
+  ink: '#2b2b2b',
+  muted: '#6b6b6b',
+  line: '#d4d4d4',
+  accent: '#2b2b2b',
+  accentSoft: '#d4d4d4',
   ok: '#3f7a57',
   okSoft: '#e3efe5',
   warn: '#9a6200',
@@ -19,13 +19,13 @@ const light = {
 };
 
 const dark: typeof light = {
-  bg: '#2e2e2e',
-  surface: '#3a3a3a',
-  ink: '#ffffe3',
-  muted: '#cbcbcb',
-  line: '#4a4a4a',
-  accent: '#a3b4c6',
-  accentSoft: '#3b4652',
+  bg: '#1f1f1f',
+  surface: '#2b2b2b',
+  ink: '#ffffff',
+  muted: '#b3b3b3',
+  line: '#444444',
+  accent: '#ffffff',
+  accentSoft: '#4a4a4a',
   ok: '#7cc79a',
   okSoft: '#24352b',
   warn: '#e8b565',
