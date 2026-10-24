@@ -106,3 +106,77 @@ export function normalizeBarcode(raw: string): string {
   if (/^0\d{12}$/.test(digits)) return digits.slice(1);
   return digits;
 }
+
+/** Whether a movement changes total stock. "Out" moves bottles from storage to the bar, so the total stays the same. */
+export function affectsStock(kind: MovementKind): boolean {
+  return kind !== 'out';
+}
+
+export interface StockTakeInput {
+  productId: number;
+  costCents: number;
+  /** Count from the previous inventory, or null if this is the first one. */
+  opening: number | null;
+  /** Bottles received, wasted and sold (from POS recipes) since the previous inventory. All positive. */
+  received: number;
+  waste: number;
+  sold: number;
+  /** What the app thinks is on hand right now. */
+  expected: number;
+  /** What staff counted, or null if the product wasn't counted. */
+  counted: number | null;
+}
+
+export interface StockTakeRow extends StockTakeInput {
+  /** counted − expected. Negative means liquor is missing. Null if not counted. */
+  variance: number | null;
+  varianceCents: number | null;
+  /** opening + received − counted: what actually left the shelf. Null without an opening count. */
+  actualUsage: number | null;
+  /** sold + waste: what the POS and waste log account for. */
+  recordedUsage: number;
+}
+
+export interface StockTakeReport {
+  rows: StockTakeRow[];
+  counted: number;
+  uncounted: number;
+  /** Sum of negative variances, in cents (a positive number). */
+  shortfallCents: number;
+  /** Net variance across counted products, in cents. */
+  netVarianceCents: number;
+  /** recorded ÷ actual usage across products with an opening count, or null if none. 1 = sales match the shelf. */
+  salesAccuracy: number | null;
+}
+
+export function stockTakeReport(inputs: StockTakeInput[]): StockTakeReport {
+  let shortfallCents = 0;
+  let netVarianceCents = 0;
+  let actualTotal = 0;
+  let recordedTotal = 0;
+  const rows = inputs.map<StockTakeRow>(i => {
+    const recordedUsage = round2(i.sold + i.waste);
+    if (i.counted === null) {
+      return { ...i, variance: null, varianceCents: null, actualUsage: null, recordedUsage };
+    }
+    const variance = round2(i.counted - i.expected);
+    const varianceCents = Math.round(variance * i.costCents);
+    netVarianceCents += varianceCents;
+    if (varianceCents < 0) shortfallCents -= varianceCents;
+    const actualUsage = i.opening === null ? null : round2(i.opening + i.received - i.counted);
+    if (actualUsage !== null) {
+      actualTotal += actualUsage * i.costCents;
+      recordedTotal += recordedUsage * i.costCents;
+    }
+    return { ...i, variance, varianceCents, actualUsage, recordedUsage };
+  });
+  const counted = rows.filter(r => r.counted !== null).length;
+  return {
+    rows,
+    counted,
+    uncounted: rows.length - counted,
+    shortfallCents,
+    netVarianceCents,
+    salesAccuracy: actualTotal > 0 ? recordedTotal / actualTotal : null,
+  };
+}

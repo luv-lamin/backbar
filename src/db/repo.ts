@@ -1,11 +1,14 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import {
+  affectsStock,
   clampDelta,
   depletionsForSale,
   type MovementKind,
   type Product,
   type RecipePour,
   type SaleLine,
+  stockTakeReport,
+  type StockTakeReport,
 } from '../domain/inventory';
 
 interface ProductRow {
@@ -77,6 +80,14 @@ async function applyDelta(
   const row = await db.getFirstAsync<{ on_hand: number }>('SELECT on_hand FROM products WHERE id = ?', productId);
   if (!row) throw new Error('Product not found');
   const applied = clampDelta(row.on_hand, delta);
+  if (!affectsStock(kind)) {
+    // Logged for the record (who moved what to the bar); POS sales take it out of stock when it's poured.
+    await db.runAsync(
+      'INSERT INTO movements (product_id, kind, bottles, source, note) VALUES (?, ?, ?, ?, ?)',
+      productId, kind, applied, source, note,
+    );
+    return row.on_hand;
+  }
   const onHand = row.on_hand + applied;
   await db.runAsync('UPDATE products SET on_hand = ? WHERE id = ?', onHand, productId);
   await db.runAsync(
@@ -84,18 +95,6 @@ async function applyDelta(
     productId, kind, applied, source, note,
   );
   return onHand;
-}
-
-/** Sets counted stock for several products at once (end-of-shift count). */
-export async function saveCount(db: SQLiteDatabase, counts: Map<number, number>): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    for (const [productId, counted] of counts) {
-      const row = await db.getFirstAsync<{ on_hand: number }>('SELECT on_hand FROM products WHERE id = ?', productId);
-      if (!row) continue;
-      const delta = counted - row.on_hand;
-      if (delta !== 0) await applyDelta(db, productId, 'count', delta, 'count', null);
-    }
-  });
 }
 
 export interface ActivityRow {
@@ -206,4 +205,131 @@ export async function getSetting(db: SQLiteDatabase, key: string): Promise<strin
 
 export async function setSetting(db: SQLiteDatabase, key: string, value: string): Promise<void> {
   await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', key, value);
+}
+
+// ---- Inventory mode (full stock take) ----
+
+export interface InventorySession {
+  id: number;
+  startedAt: string;
+  finishedAt: string | null;
+  report: StockTakeReport | null;
+}
+
+interface SessionRow {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  last_movement_id: number | null;
+  report: string | null;
+}
+
+const toSession = (r: SessionRow): InventorySession => ({
+  id: r.id,
+  startedAt: r.started_at,
+  finishedAt: r.finished_at,
+  report: r.report ? (JSON.parse(r.report) as StockTakeReport) : null,
+});
+
+export async function openInventory(db: SQLiteDatabase): Promise<InventorySession | null> {
+  const row = await db.getFirstAsync<SessionRow>('SELECT * FROM inventory_sessions WHERE finished_at IS NULL ORDER BY id DESC LIMIT 1');
+  return row ? toSession(row) : null;
+}
+
+export async function finishedInventories(db: SQLiteDatabase, limit = 12): Promise<InventorySession[]> {
+  const rows = await db.getAllAsync<SessionRow>(
+    'SELECT * FROM inventory_sessions WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT ?', limit,
+  );
+  return rows.map(toSession);
+}
+
+export async function startInventory(db: SQLiteDatabase): Promise<InventorySession> {
+  const existing = await openInventory(db);
+  if (existing) return existing;
+  await db.runAsync('INSERT INTO inventory_sessions DEFAULT VALUES');
+  return (await openInventory(db))!;
+}
+
+/** Adds to (or with a negative number, takes from) a product's count. Returns the new count. */
+export async function addToCount(db: SQLiteDatabase, sessionId: number, productId: number, bottles: number): Promise<number> {
+  await db.runAsync(
+    `INSERT INTO inventory_counts (session_id, product_id, bottles) VALUES (?, ?, MAX(0, ?))
+     ON CONFLICT (session_id, product_id) DO UPDATE SET bottles = MAX(0, bottles + ?)`,
+    sessionId, productId, bottles, bottles,
+  );
+  const row = await db.getFirstAsync<{ bottles: number }>(
+    'SELECT bottles FROM inventory_counts WHERE session_id = ? AND product_id = ?', sessionId, productId,
+  );
+  return row?.bottles ?? 0;
+}
+
+export async function setCount(db: SQLiteDatabase, sessionId: number, productId: number, bottles: number | null): Promise<void> {
+  if (bottles === null) {
+    await db.runAsync('DELETE FROM inventory_counts WHERE session_id = ? AND product_id = ?', sessionId, productId);
+    return;
+  }
+  await db.runAsync(
+    `INSERT INTO inventory_counts (session_id, product_id, bottles) VALUES (?, ?, ?)
+     ON CONFLICT (session_id, product_id) DO UPDATE SET bottles = excluded.bottles`,
+    sessionId, productId, Math.max(0, bottles),
+  );
+}
+
+export async function inventoryCounts(db: SQLiteDatabase, sessionId: number): Promise<Map<number, number>> {
+  const rows = await db.getAllAsync<{ product_id: number; bottles: number }>(
+    'SELECT product_id, bottles FROM inventory_counts WHERE session_id = ?', sessionId,
+  );
+  return new Map(rows.map(r => [r.product_id, r.bottles]));
+}
+
+export async function cancelInventory(db: SQLiteDatabase, sessionId: number): Promise<void> {
+  await db.runAsync('DELETE FROM inventory_sessions WHERE id = ? AND finished_at IS NULL', sessionId);
+}
+
+/**
+ * Builds the report, then sets stock to what was counted. Products that weren't
+ * counted keep their current stock unless `uncountedAsZero` is set.
+ */
+export async function finishInventory(db: SQLiteDatabase, sessionId: number, uncountedAsZero: boolean): Promise<StockTakeReport> {
+  let report!: StockTakeReport;
+  await db.withTransactionAsync(async () => {
+    const prev = await db.getFirstAsync<{ id: number; last_movement_id: number | null }>(
+      'SELECT id, last_movement_id FROM inventory_sessions WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1',
+    );
+    const since = prev?.last_movement_id ?? 0;
+    const last = (await db.getFirstAsync<{ id: number | null }>('SELECT MAX(id) AS id FROM movements'))?.id ?? 0;
+    const opening = prev ? await inventoryCounts(db, prev.id) : new Map<number, number>();
+    const sums = await db.getAllAsync<{ product_id: number; kind: MovementKind; total: number }>(
+      `SELECT product_id, kind, SUM(bottles) AS total FROM movements
+       WHERE id > ? AND id <= ? AND kind IN ('in', 'waste', 'sale') GROUP BY product_id, kind`,
+      since, last,
+    );
+    const counts = await inventoryCounts(db, sessionId);
+    const products = await listProducts(db);
+    const sum = (id: number, kind: MovementKind) => Math.abs(sums.find(s => s.product_id === id && s.kind === kind)?.total ?? 0);
+
+    report = stockTakeReport(products.map(p => ({
+      productId: p.id,
+      costCents: p.costCents,
+      opening: prev ? opening.get(p.id) ?? null : null,
+      received: sum(p.id, 'in'),
+      waste: sum(p.id, 'waste'),
+      sold: sum(p.id, 'sale'),
+      expected: p.onHand,
+      counted: counts.get(p.id) ?? (uncountedAsZero ? 0 : null),
+    })));
+
+    for (const p of products) {
+      const counted = counts.get(p.id) ?? (uncountedAsZero ? 0 : undefined);
+      if (counted === undefined) continue;
+      if (!counts.has(p.id)) await setCount(db, sessionId, p.id, 0);
+      if (counted !== p.onHand) await applyDelta(db, p.id, 'count', counted - p.onHand, 'inventory', `Inventory #${sessionId}`);
+    }
+    const lastAfter = (await db.getFirstAsync<{ id: number | null }>('SELECT MAX(id) AS id FROM movements'))?.id ?? 0;
+    await db.runAsync(
+      `UPDATE inventory_sessions SET finished_at = datetime('now'), last_movement_id = ?, report = ? WHERE id = ?`,
+      lastAfter, JSON.stringify(report), sessionId,
+    );
+  });
+  return report;
 }

@@ -8,13 +8,13 @@ import { DataProvider } from './src/store';
 import { useColors } from './src/theme';
 import { ScanScreen } from './src/screens/ScanScreen';
 import { StockScreen } from './src/screens/StockScreen';
-import { CountScreen } from './src/screens/CountScreen';
+import { InventoryScreen } from './src/screens/InventoryScreen';
 import { PosScreen } from './src/screens/PosScreen';
 
 const TABS = [
   { key: 'scan', label: 'Scan', Screen: ScanScreen },
   { key: 'stock', label: 'Stock', Screen: StockScreen },
-  { key: 'count', label: 'Count', Screen: CountScreen },
+  { key: 'inventory', label: 'Inventory', Screen: InventoryScreen },
   { key: 'pos', label: 'POS', Screen: PosScreen },
 ] as const;
 

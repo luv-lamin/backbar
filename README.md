@@ -1,6 +1,8 @@
 # Backbar
 
-Inventory for bars. Staff scan bottles in (deliveries), out (to the bar) and as waste; sales from the POS take the poured liquor out of stock using recipes; an end-of-shift count shows what's missing in dollars.
+Inventory for bars. Staff scan bottles in (deliveries), out (to the bar) and as waste; sales from the POS take the poured liquor out of stock using recipes; inventory mode counts the shelves and shows whether sales match what was used.
+
+Stock is the total on the premises. "Out" records a move from storage to the bar but doesn't lower stock, because POS sales already take the poured liquor out.
 
 Built with Expo (React Native) for iOS and Android. Data is stored on the device in SQLite.
 
@@ -21,7 +23,7 @@ The camera needs a development build or a store build (`npx expo run:ios`, `npx 
 | ----- | ------------ |
 | Scan  | Camera barcode scanning (UPC/EAN), or type a code / use a Bluetooth scanner. Choose In, Out or Waste, and set bottles per scan (1, 6, 12, 24 or any number) so a case is one scan. "Log right away" skips the confirm step. Unknown barcodes open an "add product" form. |
 | Stock | Bottles on hand against par, low and out flags, stock value, bottles to reorder. |
-| Count | End-of-shift shelf count; variance per product in bottles and dollars. Saving resets stock to the count. |
+| Inventory | Monthly stock take: scan every bottle (Full, ¾, ½, ¼ for open bottles, ×6/×12 for cases), adjust by hand, then finish. Stock is set to the count, and a report shows missing liquor in dollars and **sales accuracy**: how much of what left the shelves since the last inventory is explained by POS sales plus logged waste. |
 | POS   | Square connection, pull sales, map unmatched drinks to recipes. Toast, Clover and Lightspeed are listed as coming soon. |
 
 ## Code layout

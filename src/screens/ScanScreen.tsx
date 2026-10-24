@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useSQLiteContext } from 'expo-sqlite';
 import { addProduct, findByUpc, recentActivity, recordMovement } from '../db/repo';
 import { movementDelta, normalizeBarcode, type Product } from '../domain/inventory';
 import { Button, Card, Field, Label, Segmented, Title } from '../components/ui';
+import { BarcodeCamera } from '../components/BarcodeCamera';
 import { fmtBottles, useColors } from '../theme';
 import { useChanged, useQuery } from '../store';
 
@@ -17,7 +17,6 @@ export function ScanScreen() {
   const c = useColors();
   const db = useSQLiteContext();
   const changed = useChanged();
-  const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<Mode>('in');
   const [code, setCode] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
@@ -27,8 +26,6 @@ export function ScanScreen() {
   const [qty, setQty] = useState('1');
   const [amount, setAmount] = useState(1);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const busy = useRef(false);
-  const lastScan = useRef({ code: '', at: 0 });
   const activity = useQuery(d => recentActivity(d, 15), []);
 
   async function lookup(raw: string) {
@@ -43,17 +40,6 @@ export function ScanScreen() {
     if (p && autoLog && mode !== 'waste') return commit(p, batch);
     setProduct(p);
     setUnknownCode(p ? null : upc);
-  }
-
-  function onScanned(r: BarcodeScanningResult) {
-    // The camera fires many times per second; take one read until the scan is handled.
-    if (busy.current || product || unknownCode) return;
-    // With auto-log on, the same bottle stays in view after it's logged; don't count it twice.
-    const now = Date.now();
-    if (r.data === lastScan.current.code && now - lastScan.current.at < 2500) return;
-    lastScan.current = { code: r.data, at: now };
-    busy.current = true;
-    lookup(r.data).finally(() => { busy.current = false; });
   }
 
   function reset() {
@@ -71,8 +57,8 @@ export function ScanScreen() {
       return setMessage({ text: `Only ${fmtBottles(p.onHand)} bottles of ${p.name} on hand.`, ok: false });
     }
     const onHand = await recordMovement(db, p.id, mode, movementDelta(mode, bottles));
-    const verb = { in: 'Received', out: 'Sent to bar', waste: 'Logged waste:' }[mode];
-    setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${p.name}. Now ${fmtBottles(onHand)} on hand.`, ok: true });
+    const verb = { in: 'Received', out: 'Sent to bar:', waste: 'Logged waste:' }[mode];
+    setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${p.name}. ${fmtBottles(onHand)} on hand in total.`, ok: true });
     reset();
     changed();
   }
@@ -116,26 +102,7 @@ export function ScanScreen() {
         </View>
       </Card>
 
-      <View style={[styles.camera, { backgroundColor: c.ink }]}>
-        {permission?.granted ? (
-          <CameraView
-            style={StyleSheet.absoluteFill}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'] }}
-            onBarcodeScanned={product || unknownCode ? undefined : onScanned}
-          />
-        ) : (
-          <View style={styles.cameraOff}>
-            <Text style={{ color: c.surface, textAlign: 'center' }}>
-              {permission?.canAskAgain === false
-                ? 'Camera access is off. Turn it on in Settings, or type the barcode below.'
-                : 'Allow the camera to scan bottle barcodes.'}
-            </Text>
-            {permission?.canAskAgain !== false ? <Button title="Allow camera" kind="primary" onPress={requestPermission} /> : null}
-          </View>
-        )}
-        <View pointerEvents="none" style={[styles.reticle, { borderColor: c.brass }]} />
-      </View>
+      <BarcodeCamera onScan={lookup} paused={!!product || !!unknownCode} />
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Field
@@ -244,10 +211,7 @@ function NewProductForm({ upc, onDone, onCancel }: { upc: string; onDone: (p: Pr
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 14 },
-  camera: { height: 220, borderRadius: 12, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  cameraOff: { padding: 20, gap: 12, alignItems: 'center' },
   step: { minWidth: 44, paddingHorizontal: 10 },
-  reticle: { position: 'absolute', width: '70%', height: 90, borderWidth: 2, borderRadius: 8 },
   toast: { padding: 12, borderRadius: 10, fontWeight: '500', overflow: 'hidden' },
   logRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },
 });

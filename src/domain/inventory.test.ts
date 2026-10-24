@@ -9,6 +9,7 @@ import {
   normalizeBarcode,
   ozToBottles,
   stockStatus,
+  stockTakeReport,
   variance,
 } from './inventory.ts';
 
@@ -84,4 +85,35 @@ test('normalizeBarcode strips the EAN-13 leading zero from UPC-A', () => {
   assert.equal(normalizeBarcode('0080480280024'), '080480280024');
   assert.equal(normalizeBarcode(' 080480280024 '), '080480280024');
   assert.equal(normalizeBarcode('5012345678900'), '5012345678900');
+});
+
+test('stockTakeReport compares counts with the system and with sales', () => {
+  const report = stockTakeReport([
+    // Opened with 4, received 6, POS says 3 sold and 0.5 wasted: expect 6.5. Counted 5.5.
+    { productId: 1, costCents: 2000, opening: 4, received: 6, waste: 0.5, sold: 3, expected: 6.5, counted: 5.5 },
+    // Matches exactly.
+    { productId: 2, costCents: 1000, opening: 2, received: 0, waste: 0, sold: 1, expected: 1, counted: 1 },
+    // Not counted.
+    { productId: 3, costCents: 3000, opening: null, received: 0, waste: 0, sold: 0, expected: 2, counted: null },
+  ]);
+  const [a, b, c] = report.rows;
+  assert.equal(a.variance, -1);
+  assert.equal(a.varianceCents, -2000);
+  assert.equal(a.actualUsage, 4.5);
+  assert.equal(a.recordedUsage, 3.5);
+  assert.equal(b.variance, 0);
+  assert.equal(c.variance, null);
+  assert.equal(report.counted, 2);
+  assert.equal(report.uncounted, 1);
+  assert.equal(report.shortfallCents, 2000);
+  // Recorded (3.5×20 + 1×10 = 80) over actual (4.5×20 + 1×10 = 100).
+  assert.ok(Math.abs(report.salesAccuracy! - 0.8) < 1e-9);
+});
+
+test('stockTakeReport has no sales accuracy on the first inventory', () => {
+  const report = stockTakeReport([
+    { productId: 1, costCents: 2000, opening: null, received: 0, waste: 0, sold: 0, expected: 3, counted: 3 },
+  ]);
+  assert.equal(report.salesAccuracy, null);
+  assert.equal(report.rows[0].actualUsage, null);
 });

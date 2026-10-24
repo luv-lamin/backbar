@@ -44,6 +44,22 @@ const MIGRATIONS: string[] = [
   );
   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `,
+  `
+  CREATE TABLE inventory_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT,
+    -- Last movement included in this inventory's report; the next report starts after it.
+    last_movement_id INTEGER,
+    report TEXT
+  );
+  CREATE TABLE inventory_counts (
+    session_id INTEGER NOT NULL REFERENCES inventory_sessions(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    bottles REAL NOT NULL,
+    PRIMARY KEY (session_id, product_id)
+  );
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
