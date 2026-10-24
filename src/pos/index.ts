@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { square } from './square';
+import { toast } from './toast';
 import { PosError, type PosCredentials, type PosProvider, type ProviderId } from './types';
 
 const comingSoon = (id: ProviderId, name: string): PosProvider => ({
@@ -10,10 +11,10 @@ const comingSoon = (id: ProviderId, name: string): PosProvider => ({
   fetchSales: async () => { throw new PosError(`${name} is not supported yet.`); },
 });
 
-// Toast and Lightspeed need partner approval; Clover needs an App Market listing.
+// Lightspeed needs partner approval; Clover needs an App Market listing.
 export const PROVIDERS: PosProvider[] = [
   square,
-  comingSoon('toast', 'Toast'),
+  toast,
   comingSoon('clover', 'Clover'),
   comingSoon('lightspeed', 'Lightspeed'),
 ];

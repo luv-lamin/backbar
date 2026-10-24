@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { applySales, getSetting, getUsesPos, listProducts, listRecipes, setSetting, setUsesPos, upsertRecipe } from '../db/repo';
+import { ANY_POS, applySales, getSetting, getUsesPos, listProducts, listRecipes, setSetting, setUsesPos, upsertRecipe } from '../db/repo';
 import { clearCredentials, loadCredentials, PROVIDERS, saveCredentials, type PosCredentials } from '../pos';
-import type { PosLocation } from '../pos/types';
-import { square } from '../pos/square';
+import type { PosField, PosLocation, PosProvider } from '../pos/types';
 import { Button, Card, Field, Label, Title } from '../components/ui';
 import { useColors } from '../theme';
 import { useChanged, useQuery } from '../store';
@@ -41,12 +40,14 @@ export function PosScreen() {
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       {modeCard}
 
-      <SquareCard onUnmapped={setUnmapped} />
+      {PROVIDERS.filter(p => p.available).map(p => (
+        <ProviderCard key={p.id} provider={p} onUnmapped={names => setUnmapped(u => [...new Set([...u, ...names])])} />
+      ))}
 
       {unmapped.length ? <MapItems names={unmapped} onDone={name => setUnmapped(u => u.filter(n => n !== name))} /> : null}
 
       <Card>
-        <Title sub="Each POS menu item maps to the pours it uses. A 750 ml bottle is about 25.4 oz.">Recipes</Title>
+        <Title sub="Each menu item maps to the pours it uses. A 750 ml bottle is about 25.4 oz. Recipes match by drink name, so they keep working if you switch POS.">Recipes</Title>
         {recipes.length === 0 ? <Text style={{ color: c.muted }}>No recipes yet. After a sync, unmatched drinks show up here to map.</Text> : null}
         {recipes.map(r => (
           <View key={r.id} style={[styles.row, { borderColor: c.line }]}>
@@ -69,12 +70,14 @@ export function PosScreen() {
   );
 }
 
-function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
+function ProviderCard({ provider, onUnmapped }: { provider: PosProvider; onUnmapped: (names: string[]) => void }) {
   const c = useColors();
   const db = useSQLiteContext();
   const changed = useChanged();
+  const fields = provider.fields ?? [];
+  const syncKey = `${provider.id}.lastSync`;
   const [creds, setCreds] = useState<PosCredentials | null>(null);
-  const [token, setToken] = useState('');
+  const [form, setForm] = useState<Partial<Record<PosField['key'], string>>>({});
   const [sandbox, setSandbox] = useState(false);
   const [locations, setLocations] = useState<PosLocation[]>([]);
   const [status, setStatus] = useState('');
@@ -82,9 +85,9 @@ function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   useEffect(() => {
-    loadCredentials('square').then(setCreds);
-    getSetting(db, 'square.lastSync').then(setLastSync);
-  }, [db]);
+    loadCredentials(provider.id).then(setCreds);
+    getSetting(db, syncKey).then(setLastSync);
+  }, [db, provider.id, syncKey]);
 
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -92,21 +95,30 @@ function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
     try { await task(); } catch (e) { setStatus(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
 
+  const draft = (): PosCredentials => {
+    const d: PosCredentials = { sandbox };
+    for (const f of fields) {
+      const v = form[f.key]?.trim();
+      if (v) d[f.key] = v;
+    }
+    return d;
+  };
+
   const connect = () => run(async () => {
-    const draft = { accessToken: token.trim(), sandbox };
-    const locs = await square.listLocations(draft);
-    if (!locs.length) throw new Error('No active locations on this Square account.');
-    if (locs.length === 1) return choose(draft, locs[0]);
+    const d = draft();
+    const locs = await provider.listLocations(d);
+    if (!locs.length) throw new Error(`No active locations on this ${provider.name} account.`);
+    if (locs.length === 1) return choose(d, locs[0]);
     setLocations(locs);
     setCreds(null);
   });
 
-  async function choose(draft: PosCredentials, loc: PosLocation) {
-    const next = { ...draft, locationId: loc.id };
-    await saveCredentials('square', next);
+  async function choose(d: PosCredentials, loc: PosLocation) {
+    const next = { ...d, locationId: loc.id };
+    await saveCredentials(provider.id, next);
     setCreds(next);
     setLocations([]);
-    setToken('');
+    setForm({});
     setStatus(`Connected to ${loc.name}.`);
   }
 
@@ -114,9 +126,9 @@ function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
     if (!creds) return;
     const startedAt = new Date().toISOString();
     const since = lastSync ?? new Date(Date.now() - DAY_MS).toISOString();
-    const sales = await square.fetchSales(creds, since);
-    const { applied, unmapped } = await applySales(db, 'square', sales);
-    await setSetting(db, 'square.lastSync', startedAt);
+    const sales = await provider.fetchSales(creds, since);
+    const { applied, unmapped } = await applySales(db, provider.id, sales);
+    await setSetting(db, syncKey, startedAt);
     setLastSync(startedAt);
     onUnmapped(unmapped);
     setStatus(`Pulled ${applied} new order${applied === 1 ? '' : 's'}.${unmapped.length ? ` ${unmapped.length} item${unmapped.length === 1 ? '' : 's'} need a recipe.` : ''}`);
@@ -124,13 +136,15 @@ function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
   });
 
   const disconnect = () => run(async () => {
-    await clearCredentials('square');
+    await clearCredentials(provider.id);
     setCreds(null);
   });
 
+  const ready = fields.every(f => f.optional || form[f.key]?.trim());
+
   return (
     <Card>
-      <Title sub="Sales come in from Square and the pours are taken out of stock.">Square</Title>
+      <Title sub={`Sales come in from ${provider.name} and the pours are taken out of stock.`}>{provider.name}</Title>
       {creds ? (
         <>
           <Text style={{ color: c.ok, fontWeight: '600' }}>Connected{creds.sandbox ? ' (sandbox)' : ''}</Text>
@@ -142,20 +156,32 @@ function SquareCard({ onUnmapped }: { onUnmapped: (names: string[]) => void }) {
         <>
           <Label>Choose a location</Label>
           {locations.map(l => (
-            <Button key={l.id} title={l.name} onPress={() => run(() => choose({ accessToken: token.trim(), sandbox }, l))} />
+            <Button key={l.id} title={l.name} onPress={() => run(() => choose(draft(), l))} />
           ))}
         </>
       ) : (
         <>
-          <View style={{ gap: 6 }}>
-            <Label>Access token</Label>
-            <Field value={token} onChangeText={setToken} placeholder="From developer.squareup.com" autoCapitalize="none" autoCorrect={false} secureTextEntry />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: c.ink }}>Sandbox (test data)</Text>
-            <Switch value={sandbox} onValueChange={setSandbox} />
-          </View>
-          <Button kind="primary" title={busy ? 'Connecting…' : 'Connect Square'} disabled={busy || !token.trim()} onPress={connect} />
+          {provider.help ? <Text style={{ color: c.muted, fontSize: 13 }}>{provider.help}</Text> : null}
+          {fields.map(f => (
+            <View key={f.key} style={{ gap: 6 }}>
+              <Label>{f.label}{f.optional ? ' (optional)' : ''}</Label>
+              <Field
+                value={form[f.key] ?? ''}
+                onChangeText={v => setForm(s => ({ ...s, [f.key]: v }))}
+                placeholder={f.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry={f.secret}
+              />
+            </View>
+          ))}
+          {provider.sandbox ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: c.ink }}>Sandbox (test data)</Text>
+              <Switch value={sandbox} onValueChange={setSandbox} />
+            </View>
+          ) : null}
+          <Button kind="primary" title={busy ? 'Connecting…' : `Connect ${provider.name}`} disabled={busy || !ready} onPress={connect} />
         </>
       )}
       {status ? <Text style={{ color: c.muted }}>{status}</Text> : null}
@@ -175,8 +201,8 @@ function MapItems({ names, onDone }: { names: string[]; onDone: (name: string) =
 
   async function save() {
     if (!productId) return;
-    // Unmapped items are reported by display name; the next sync matches on it.
-    await upsertRecipe(db, 'square', `name:${current}`, current, [{ productId, oz: parseFloat(oz) || 1.5 }]);
+    // Unmapped items are reported by display name. Saved for any POS, so the recipe survives a switch.
+    await upsertRecipe(db, ANY_POS, `name:${current}`, current, [{ productId, oz: parseFloat(oz) || 1.5 }]);
     setProductId(null);
     onDone(current);
     changed();

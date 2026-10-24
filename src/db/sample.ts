@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { addProduct, findByUpc, recordMovement, upsertRecipe } from './repo';
+import { addProduct, ANY_POS, findByUpc, recordMovement, upsertRecipe } from './repo';
 
 // A small starter back bar so a new install has something to scan against.
 const PRODUCTS = [
@@ -32,7 +32,7 @@ export async function loadSampleBar(db: SQLiteDatabase): Promise<void> {
       const p = await findByUpc(db, upc);
       if (p) pours.push({ productId: p.id, oz });
     }
-    // Keyed by name until the bar connects a POS and maps real catalog items.
-    await upsertRecipe(db, 'square', `name:${r.name}`, r.name, pours);
+    // Keyed by drink name so they match sales from any POS.
+    await upsertRecipe(db, ANY_POS, `name:${r.name}`, r.name, pours);
   }
 }

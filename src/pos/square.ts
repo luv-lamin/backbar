@@ -19,6 +19,7 @@ interface SquareOrder {
 }
 
 async function call<T>(creds: PosCredentials, path: string, body?: unknown): Promise<T> {
+  if (!creds.accessToken) throw new PosError('Enter a Square access token.');
   const res = await fetch((creds.sandbox ? SANDBOX_BASE : BASE) + path, {
     method: body ? 'POST' : 'GET',
     headers: {
@@ -53,6 +54,9 @@ export const square: PosProvider = {
   id: 'square',
   name: 'Square',
   available: true,
+  help: 'Create an access token at developer.squareup.com under your application\'s Credentials.',
+  fields: [{ key: 'accessToken', label: 'Access token', placeholder: 'From developer.squareup.com', secret: true }],
+  sandbox: true,
 
   async listLocations(creds) {
     const json = await call<{ locations?: { id: string; name: string; status: string }[] }>(creds, '/locations');

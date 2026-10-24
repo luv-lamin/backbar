@@ -70,6 +70,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE movements ADD COLUMN staff_id INTEGER REFERENCES staff(id);
   ALTER TABLE movements ADD COLUMN reason TEXT;
   `,
+  `
+  -- Recipes made by drink name apply to every POS, so they survive switching POS.
+  UPDATE OR IGNORE recipes SET provider = 'any' WHERE pos_item_id LIKE 'name:%';
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

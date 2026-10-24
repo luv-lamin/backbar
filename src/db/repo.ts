@@ -165,6 +165,9 @@ export async function upsertRecipe(
   });
 }
 
+/** Provider value for recipes that apply whatever POS the bar uses. */
+export const ANY_POS = 'any';
+
 export interface Sale {
   id: string;
   lines: SaleLine[];
@@ -175,8 +178,11 @@ export interface Sale {
  * so pulling the same window twice is safe. Returns item names with no recipe.
  */
 export async function applySales(db: SQLiteDatabase, provider: string, sales: Sale[]): Promise<{ applied: number; unmapped: string[] }> {
+  // This POS's own item ids first, then any recipe by drink name, so recipes carry over when a bar switches POS.
   const recipes = new Map<string, RecipePour[]>();
-  for (const r of await listRecipes(db)) if (r.provider === provider) recipes.set(r.posItemId, r.pours);
+  const all = await listRecipes(db);
+  for (const r of all) if (r.provider === provider) recipes.set(r.posItemId, r.pours);
+  for (const r of all) if (!recipes.has(`name:${r.name}`)) recipes.set(`name:${r.name}`, r.pours);
   const products = new Map((await listProducts(db)).map(p => [p.id, p] as const));
   const unmapped = new Set<string>();
   let applied = 0;
