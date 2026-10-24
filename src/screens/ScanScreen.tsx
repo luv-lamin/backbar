@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { addProduct, findByUpc, recentActivity, recordMovement } from '../db/repo';
 import { movementDelta, normalizeBarcode, WASTE_REASONS, type Product, type WasteReason } from '../domain/inventory';
@@ -9,6 +9,7 @@ import { fmtBottles, useColors } from '../theme';
 import { useChanged, useQuery } from '../store';
 
 type Mode = 'in' | 'out' | 'waste';
+const MODE_BANNER: Record<Mode, string> = { in: 'SCANNING IN', out: 'SCANNING OUT', waste: 'LOGGING WASTE' };
 const WASTE_AMOUNTS: [number, string][] = [[1, 'Full'], [0.75, '¾'], [0.5, '½'], [0.25, '¼'], [0.06, 'Shot']];
 // Common case and half-case sizes, so a delivery is one tap and one scan.
 const BATCH_PRESETS = [1, 6, 12, 24];
@@ -26,6 +27,13 @@ export function ScanScreen() {
   const [qty, setQty] = useState('1');
   const [amount, setAmount] = useState(1);
   const [reason, setReason] = useState<WasteReason>('spill');
+  // The whole screen is tinted by mode so nobody scans In when they meant Out, and flashes on each save.
+  const modeColor = { in: c.ok, out: c.warn, waste: c.bad }[mode];
+  const flash = useRef(new Animated.Value(0)).current;
+  function flashScreen() {
+    flash.setValue(0.6);
+    Animated.timing(flash, { toValue: 0, duration: 600, useNativeDriver: true }).start();
+  }
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const activity = useQuery(d => recentActivity(d, 15), []);
 
@@ -58,6 +66,7 @@ export function ScanScreen() {
       return setMessage({ text: `Only ${fmtBottles(p.onHand)} bottles of ${p.name} on hand.`, ok: false });
     }
     const onHand = await recordMovement(db, p.id, mode, movementDelta(mode, bottles), 'scan', null, mode === 'waste' ? reason : null);
+    flashScreen();
     const verb = { in: 'Received', out: 'Sent to bar:', waste: 'Logged waste:' }[mode];
     setMessage({ text: `${verb} ${fmtBottles(bottles)} × ${p.name}. ${fmtBottles(onHand)} on hand in total.`, ok: true });
     reset();
@@ -65,13 +74,18 @@ export function ScanScreen() {
   }
 
   return (
+    <View style={{ flex: 1, backgroundColor: modeColor + '40' }}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: modeColor, opacity: flash }]} />
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <View style={[styles.banner, { backgroundColor: modeColor }]} accessibilityRole="header">
+        <Text style={[styles.bannerText, { color: c.surface }]}>{MODE_BANNER[mode]}</Text>
+      </View>
       <Segmented<Mode>
         value={mode}
         onChange={setMode}
         options={[
           { value: 'in', label: 'In', hint: 'Delivery', tint: [c.okSoft, c.ok] },
-          { value: 'out', label: 'Out', hint: 'To the bar', tint: [c.accentSoft, c.accent] },
+          { value: 'out', label: 'Out', hint: 'To the bar', tint: [c.warnSoft, c.warn] },
           { value: 'waste', label: 'Waste', hint: 'Spill, comp', tint: [c.badSoft, c.bad] },
         ]}
       />
@@ -177,6 +191,7 @@ export function ScanScreen() {
         ))}
       </Card>
     </ScrollView>
+    </View>
   );
 }
 
@@ -222,6 +237,8 @@ function NewProductForm({ upc, onDone, onCancel }: { upc: string; onDone: (p: Pr
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 14 },
+  banner: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  bannerText: { fontSize: 22, fontWeight: '800', letterSpacing: 1 },
   step: { minWidth: 44, paddingHorizontal: 10 },
   toast: { padding: 12, borderRadius: 10, fontWeight: '500', overflow: 'hidden' },
   logRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },
