@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  affectsStock,
   bottlesToReorder,
   clampDelta,
   depletionsForSale,
@@ -12,6 +13,12 @@ import {
   stockTakeReport,
   variance,
 } from './inventory.ts';
+
+test('Out lowers stock only for bars without a POS', () => {
+  assert.equal(affectsStock('out', true), false);
+  assert.equal(affectsStock('out', false), true);
+  assert.equal(affectsStock('in', true), true);
+});
 
 test('stockStatus flags low and out', () => {
   assert.equal(stockStatus({ onHand: 0, par: 3 }), 'out');
@@ -90,11 +97,11 @@ test('normalizeBarcode strips the EAN-13 leading zero from UPC-A', () => {
 test('stockTakeReport compares counts with the system and with sales', () => {
   const report = stockTakeReport([
     // Opened with 4, received 6, POS says 3 sold and 0.5 wasted: expect 6.5. Counted 5.5.
-    { productId: 1, costCents: 2000, opening: 4, received: 6, waste: 0.5, sold: 3, expected: 6.5, counted: 5.5 },
+    { productId: 1, costCents: 2000, opening: 4, received: 6, waste: 0.5, sold: 3, sentOut: 2, expected: 6.5, counted: 5.5 },
     // Matches exactly.
-    { productId: 2, costCents: 1000, opening: 2, received: 0, waste: 0, sold: 1, expected: 1, counted: 1 },
+    { productId: 2, costCents: 1000, opening: 2, received: 0, waste: 0, sold: 1, sentOut: 0, expected: 1, counted: 1 },
     // Not counted.
-    { productId: 3, costCents: 3000, opening: null, received: 0, waste: 0, sold: 0, expected: 2, counted: null },
+    { productId: 3, costCents: 3000, opening: null, received: 0, waste: 0, sold: 0, sentOut: 0, expected: 2, counted: null },
   ]);
   const [a, b, c] = report.rows;
   assert.equal(a.variance, -1);
@@ -112,8 +119,19 @@ test('stockTakeReport compares counts with the system and with sales', () => {
 
 test('stockTakeReport has no sales accuracy on the first inventory', () => {
   const report = stockTakeReport([
-    { productId: 1, costCents: 2000, opening: null, received: 0, waste: 0, sold: 0, expected: 3, counted: 3 },
+    { productId: 1, costCents: 2000, opening: null, received: 0, waste: 0, sold: 0, sentOut: 0, expected: 3, counted: 3 },
   ]);
   assert.equal(report.salesAccuracy, null);
   assert.equal(report.rows[0].actualUsage, null);
+});
+
+test('without a POS, bottles sent out count as used', () => {
+  const report = stockTakeReport([
+    // Opened 4, received 6, sent 4 to the bar, wasted 0.5: expect 5.5. Counted 5, so 5 used vs 4.5 recorded.
+    { productId: 1, costCents: 2000, opening: 4, received: 6, waste: 0.5, sold: 0, sentOut: 4, expected: 5.5, counted: 5 },
+  ], false);
+  assert.equal(report.rows[0].recordedUsage, 4.5);
+  assert.equal(report.rows[0].actualUsage, 5);
+  assert.ok(Math.abs(report.salesAccuracy! - 0.9) < 1e-9);
+  assert.equal(report.usesPos, false);
 });

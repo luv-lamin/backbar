@@ -80,7 +80,7 @@ async function applyDelta(
   const row = await db.getFirstAsync<{ on_hand: number }>('SELECT on_hand FROM products WHERE id = ?', productId);
   if (!row) throw new Error('Product not found');
   const applied = clampDelta(row.on_hand, delta);
-  if (!affectsStock(kind)) {
+  if (!affectsStock(kind, await getUsesPos(db))) {
     // Logged for the record (who moved what to the bar); POS sales take it out of stock when it's poured.
     await db.runAsync(
       'INSERT INTO movements (product_id, kind, bottles, source, note) VALUES (?, ?, ?, ?, ?)',
@@ -301,7 +301,7 @@ export async function finishInventory(db: SQLiteDatabase, sessionId: number, unc
     const opening = prev ? await inventoryCounts(db, prev.id) : new Map<number, number>();
     const sums = await db.getAllAsync<{ product_id: number; kind: MovementKind; total: number }>(
       `SELECT product_id, kind, SUM(bottles) AS total FROM movements
-       WHERE id > ? AND id <= ? AND kind IN ('in', 'waste', 'sale') GROUP BY product_id, kind`,
+       WHERE id > ? AND id <= ? AND kind IN ('in', 'out', 'waste', 'sale') GROUP BY product_id, kind`,
       since, last,
     );
     const counts = await inventoryCounts(db, sessionId);
@@ -315,9 +315,10 @@ export async function finishInventory(db: SQLiteDatabase, sessionId: number, unc
       received: sum(p.id, 'in'),
       waste: sum(p.id, 'waste'),
       sold: sum(p.id, 'sale'),
+      sentOut: sum(p.id, 'out'),
       expected: p.onHand,
       counted: counts.get(p.id) ?? (uncountedAsZero ? 0 : null),
-    })));
+    })), await getUsesPos(db));
 
     for (const p of products) {
       const counted = counts.get(p.id) ?? (uncountedAsZero ? 0 : undefined);
@@ -332,4 +333,13 @@ export async function finishInventory(db: SQLiteDatabase, sessionId: number, unc
     );
   });
   return report;
+}
+
+/** Whether this bar sells through a POS. Defaults to yes. */
+export async function getUsesPos(db: SQLiteDatabase): Promise<boolean> {
+  return (await getSetting(db, 'bar.usesPos')) !== '0';
+}
+
+export async function setUsesPos(db: SQLiteDatabase, usesPos: boolean): Promise<void> {
+  await setSetting(db, 'bar.usesPos', usesPos ? '1' : '0');
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { applySales, getSetting, listProducts, listRecipes, setSetting, upsertRecipe } from '../db/repo';
+import { applySales, getSetting, getUsesPos, listProducts, listRecipes, setSetting, setUsesPos, upsertRecipe } from '../db/repo';
 import { clearCredentials, loadCredentials, PROVIDERS, saveCredentials, type PosCredentials } from '../pos';
 import type { PosLocation } from '../pos/types';
 import { square } from '../pos/square';
@@ -13,11 +13,34 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function PosScreen() {
   const c = useColors();
+  const db = useSQLiteContext();
+  const changed = useChanged();
+  const usesPos = useQuery(getUsesPos, true);
   const recipes = useQuery(listRecipes, []);
   const [unmapped, setUnmapped] = useState<string[]>([]);
 
+  const modeCard = (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ color: c.ink, flex: 1, fontWeight: '600' }}>This bar uses a POS system</Text>
+        <Switch value={usesPos} onValueChange={v => setUsesPos(db, v).then(changed)} accessibilityLabel="This bar uses a POS system" />
+      </View>
+      <Text style={{ color: c.muted }}>
+        {usesPos
+          ? 'Sales from your POS take poured liquor out of stock. Scanning a bottle Out just records that it went to the bar.'
+          : 'No POS: scanning a bottle Out counts it as used and takes it out of stock. Inventory reports compare your count with what was scanned out.'}
+      </Text>
+    </Card>
+  );
+
+  if (!usesPos) {
+    return <ScrollView contentContainerStyle={styles.page}>{modeCard}</ScrollView>;
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      {modeCard}
+
       <SquareCard onUnmapped={setUnmapped} />
 
       {unmapped.length ? <MapItems names={unmapped} onDone={name => setUnmapped(u => u.filter(n => n !== name))} /> : null}

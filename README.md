@@ -2,7 +2,7 @@
 
 Inventory for bars. Staff scan bottles in (deliveries), out (to the bar) and as waste; sales from the POS take the poured liquor out of stock using recipes; inventory mode counts the shelves and shows whether sales match what was used.
 
-Stock is the total on the premises. "Out" records a move from storage to the bar but doesn't lower stock, because POS sales already take the poured liquor out.
+Stock is the total on the premises. With a POS, "Out" records a move from storage to the bar but doesn't lower stock, because POS sales already take the poured liquor out. Bars without a POS turn off "This bar uses a POS system" on the POS tab; then "Out" counts the bottle as used, and inventory reports compare counts with Out scans instead of sales.
 
 Built with Expo (React Native) for iOS and Android. Data is stored on the device in SQLite.
 

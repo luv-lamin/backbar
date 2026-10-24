@@ -107,9 +107,12 @@ export function normalizeBarcode(raw: string): string {
   return digits;
 }
 
-/** Whether a movement changes total stock. "Out" moves bottles from storage to the bar, so the total stays the same. */
-export function affectsStock(kind: MovementKind): boolean {
-  return kind !== 'out';
+/**
+ * Whether a movement changes total stock. With a POS, "Out" only moves bottles from storage
+ * to the bar (sales take out what's poured). Without one, a bottle sent out counts as used.
+ */
+export function affectsStock(kind: MovementKind, usesPos: boolean): boolean {
+  return kind !== 'out' || !usesPos;
 }
 
 export interface StockTakeInput {
@@ -121,6 +124,8 @@ export interface StockTakeInput {
   received: number;
   waste: number;
   sold: number;
+  /** Bottles scanned Out to the bar. Counts as used when the bar has no POS. */
+  sentOut: number;
   /** What the app thinks is on hand right now. */
   expected: number;
   /** What staff counted, or null if the product wasn't counted. */
@@ -133,7 +138,7 @@ export interface StockTakeRow extends StockTakeInput {
   varianceCents: number | null;
   /** opening + received − counted: what actually left the shelf. Null without an opening count. */
   actualUsage: number | null;
-  /** sold + waste: what the POS and waste log account for. */
+  /** What the records account for: sold + waste with a POS, sent out + waste without. */
   recordedUsage: number;
 }
 
@@ -145,17 +150,18 @@ export interface StockTakeReport {
   shortfallCents: number;
   /** Net variance across counted products, in cents. */
   netVarianceCents: number;
-  /** recorded ÷ actual usage across products with an opening count, or null if none. 1 = sales match the shelf. */
+  /** recorded ÷ actual usage across products with an opening count, or null if none. 1 = records match the shelf. */
   salesAccuracy: number | null;
+  usesPos: boolean;
 }
 
-export function stockTakeReport(inputs: StockTakeInput[]): StockTakeReport {
+export function stockTakeReport(inputs: StockTakeInput[], usesPos = true): StockTakeReport {
   let shortfallCents = 0;
   let netVarianceCents = 0;
   let actualTotal = 0;
   let recordedTotal = 0;
   const rows = inputs.map<StockTakeRow>(i => {
-    const recordedUsage = round2(i.sold + i.waste);
+    const recordedUsage = round2((usesPos ? i.sold : i.sentOut) + i.waste);
     if (i.counted === null) {
       return { ...i, variance: null, varianceCents: null, actualUsage: null, recordedUsage };
     }
@@ -178,5 +184,6 @@ export function stockTakeReport(inputs: StockTakeInput[]): StockTakeReport {
     shortfallCents,
     netVarianceCents,
     salesAccuracy: actualTotal > 0 ? recordedTotal / actualTotal : null,
+    usesPos,
   };
 }

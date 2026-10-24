@@ -44,7 +44,7 @@ function StartView({ history, products }: { history: InventorySession[]; product
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Card>
-        <Title sub="Scan every bottle on the shelves and in storage. When you finish, stock is set to what you counted, and you get a report comparing it with what your POS sales say should be there.">
+        <Title sub="Scan every bottle on the shelves and in storage. When you finish, stock is set to what you counted, and you get a report comparing it with what your sales and scans say should be there.">
           Inventory
         </Title>
         <Button kind="primary" title="Start inventory" disabled={!products.length} onPress={() => startInventory(db).then(changed)} />
@@ -234,6 +234,8 @@ function ReportSummary({ session, expanded, onToggle }: { session: InventorySess
   const r = session.report;
   if (!r) return null;
   const accuracy = r.salesAccuracy === null ? null : Math.round(r.salesAccuracy * 100);
+  // Reports saved before the no-POS setting existed were all POS reports.
+  const usesPos = r.usesPos !== false;
   return (
     <View style={{ gap: 10 }}>
       <Title sub={`${r.counted} counted${r.uncounted ? `, ${r.uncounted} not counted` : ''}`}>
@@ -242,15 +244,15 @@ function ReportSummary({ session, expanded, onToggle }: { session: InventorySess
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Stat label="Missing at cost" value={fmtMoney(r.shortfallCents)} tone={r.shortfallCents ? c.bad : c.ok} />
         <Stat
-          label="Sales accuracy"
+          label={usesPos ? 'Sales accuracy' : 'Scan accuracy'}
           value={accuracy === null ? '—' : `${accuracy}%`}
           tone={accuracy === null ? c.muted : accuracy >= 95 ? c.ok : accuracy >= 85 ? c.warn : c.bad}
         />
       </View>
       <Text style={{ color: c.muted, fontSize: 12 }}>
         {accuracy === null
-          ? 'Sales accuracy appears from your second inventory, once there is a starting count to compare against.'
-          : `Your POS sales and waste log explain ${accuracy}% of the liquor that left the shelves since the last inventory.`}
+          ? `${usesPos ? 'Sales' : 'Scan'} accuracy appears from your second inventory, once there is a starting count to compare against.`
+          : `Your ${usesPos ? 'POS sales' : 'Out scans'} and waste log explain ${accuracy}% of the liquor that left the shelves since the last inventory.`}
       </Text>
       <Button title={expanded ? 'Hide details' : 'Show details'} onPress={onToggle} />
     </View>
@@ -259,6 +261,7 @@ function ReportSummary({ session, expanded, onToggle }: { session: InventorySess
 
 function ReportRows({ report, products }: { report: StockTakeReport; products: Product[] }) {
   const c = useColors();
+  const recordedLabel = report.usesPos === false ? 'sent out + waste' : 'sold + waste';
   const name = (id: number) => products.find(p => p.id === id)?.name ?? 'Deleted product';
   const rows = [...report.rows].sort((a, b) => (a.varianceCents ?? 0) - (b.varianceCents ?? 0));
   return (
@@ -273,7 +276,7 @@ function ReportRows({ report, products }: { report: StockTakeReport; products: P
           </View>
           <Text style={{ color: c.muted, fontSize: 12 }}>
             Expected {fmtBottles(r.expected)} · counted {r.counted === null ? '—' : fmtBottles(r.counted)}
-            {r.actualUsage !== null ? ` · used ${fmtBottles(r.actualUsage)}, sold + waste ${fmtBottles(r.recordedUsage)}` : ''}
+            {r.actualUsage !== null ? ` · used ${fmtBottles(r.actualUsage)}, ${recordedLabel} ${fmtBottles(r.recordedUsage)}` : ''}
           </Text>
         </View>
       ))}
